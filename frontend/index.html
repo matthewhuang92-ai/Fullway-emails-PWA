@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a56db">
+  <title>邮件便捷处理工具</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     顶部标题栏
+════════════════════════════════════════════════ -->
+<header class="app-header">
+  <div class="header-left">
+    <span class="app-title">📧 邮件便捷处理工具</span>
+    <span class="email-addr" id="emailAddr"></span>
+  </div>
+  <div class="header-right">
+    <span class="conn-indicator" id="connIndicator">● 未连接</span>
+    <button class="btn btn-sm" id="btnSettings" title="API 设置">⚙</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════
+     主体三栏布局
+════════════════════════════════════════════════ -->
+<main class="app-main">
+
+  <!-- ── 左栏：邮件列表 ── -->
+  <section class="pane pane-list">
+    <div class="pane-toolbar">
+      <button class="btn btn-primary" id="btnFetch">获取未读邮件</button>
+      <button class="btn" id="btnRefresh" title="刷新">↻</button>
+      <button class="btn" id="btnSearch" title="搜索">🔍</button>
+      <button class="btn btn-danger" id="btnMarkRead" title="标记已读">已读</button>
+    </div>
+    <div class="email-list-header">
+      <input type="checkbox" id="chkAll" title="全选">
+      <span class="col-date">日期</span>
+      <span class="col-from">发件人</span>
+      <span class="col-subj">主题</span>
+      <span class="col-att">附件</span>
+    </div>
+    <div class="email-list" id="emailList">
+      <div class="empty-hint">点击「获取未读邮件」加载</div>
+    </div>
+  </section>
+
+  <!-- ── 中栏：邮件详情 ── -->
+  <section class="pane pane-detail">
+    <div class="email-meta" id="emailMeta">
+      <div class="meta-placeholder">← 点击左侧邮件查看详情</div>
+    </div>
+    <div class="email-body-wrap">
+      <pre class="email-body" id="emailBody"></pre>
+    </div>
+    <div class="detail-actions" id="detailActions" style="display:none">
+      <button class="btn btn-primary" id="btnForwardOriginal">✉ 转发正本</button>
+      <button class="btn" id="btnForwardDraft">📋 转发草稿</button>
+      <button class="btn" id="btnParseEmail">🔍 解析邮件信息</button>
+    </div>
+  </section>
+
+  <!-- ── 右栏：附件预览 ── -->
+  <section class="pane pane-attachment">
+    <div class="att-toolbar">
+      <select class="select-att" id="selectAtt">
+        <option value="">— 选择附件 —</option>
+      </select>
+      <button class="btn" id="btnPreviewAtt">预览</button>
+      <button class="btn" id="btnDownloadAtt">⬇ 下载</button>
+    </div>
+    <div class="att-viewer" id="attViewer">
+      <div class="empty-hint">选择附件后点击「预览」</div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════
+     底部日志
+════════════════════════════════════════════════ -->
+<footer class="app-footer">
+  <div class="log-area" id="logArea"></div>
+</footer>
+
+<!-- ═══════════════════════════════════════════════
+     对话框容器（动态插入）
+════════════════════════════════════════════════ -->
+<div id="modalOverlay" class="modal-overlay" style="display:none"></div>
+<div id="modalContainer"></div>
+
+<!-- ═══════════════════════════════════════════════
+     第三方库（CDN）
+════════════════════════════════════════════════ -->
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- SheetJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- mammoth.js (Word) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+<!-- ═══════════════════════════════════════════════
+     应用模块
+════════════════════════════════════════════════ -->
+<script type="module" src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+</script>
+
+</body>
+</html>

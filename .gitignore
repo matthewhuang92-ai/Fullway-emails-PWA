@@ -1,0 +1,37 @@
+# ════════════════════════════════════
+# 绝不入库：含密码/密钥的文件
+# ════════════════════════════════════
+config.json
+.env
+.env.*
+*.env
+secrets.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# 系统/IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.bak
+*.swp
+
+# 测试
+.pytest_cache/
+htmlcov/
+.coverage
+
+# 旧版桌面工具（不入库，保留在原目录）
+邮件便捷处理工具*.py
+启动邮件便捷处理工具*
