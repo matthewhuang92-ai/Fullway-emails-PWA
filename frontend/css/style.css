@@ -18,15 +18,22 @@
   --shadow:    0 1px 3px rgba(0,0,0,.1);
 }
 
+html { height: 100%; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   background: var(--bg);
   color: var(--text);
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
 }
 
 /* ── 顶部标题栏 ── */
@@ -361,7 +368,33 @@ body {
 
 /* ── 响应式：手机竖屏 ── */
 @media (max-width: 640px) {
-  .app-main { flex-direction: column; overflow-y: auto; }
-  .pane-list, .pane-attachment { width: 100%; }
-  .pane-detail { min-height: 200px; }
+  :root {
+    --footer-h: 70px;
+    --list-w: 100%;
+    --att-w: 100%;
+  }
+
+  .app-main {
+    flex-direction: column;
+    overflow-y: auto;
+    gap: 3px;
+    padding: 3px;
+  }
+
+  .pane-list, .pane-attachment { width: 100%; flex-shrink: 0; }
+  .pane-list { height: 280px; }
+  .pane-detail { min-height: 300px; flex-shrink: 0; }
+  .pane-attachment { height: 300px; flex-shrink: 0; }
+
+  .email-addr { max-width: 130px; font-size: 11px; }
+  .app-title { font-size: 13px; }
+
+  /* 手机上隐藏附件列 节省空间 */
+  .col-att { display: none; }
+  .email-list-header .col-att { display: none; }
+
+  .modal { min-width: unset; width: 96vw; }
+
+  .detail-actions { gap: 4px; }
+  .detail-actions .btn { font-size: 11px; padding: 4px 7px; }
 }
