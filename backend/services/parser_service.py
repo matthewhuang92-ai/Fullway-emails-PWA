@@ -141,6 +141,210 @@ def _get_mysql_conn():
     )
 
 
+# ── 货代邮箱精确映射缓存 ──────────────────────────────────────
+_forwarder_email_lookup_cache = None
+
+
+def _load_forwarder_email_lookup_from_db():
+    try:
+        conn = _get_mysql_conn()
+        with conn.cursor() as cur:
+            cur.execute("SELECT `email_address`, `货代` FROM `forwarder_email_lookup`")
+            rows = cur.fetchall()
+        conn.close()
+        return {email.lower(): forwarder for email, forwarder in rows}
+    except Exception:
+        return {}
+
+
+def get_forwarder_email_lookup():
+    global _forwarder_email_lookup_cache
+    if _forwarder_email_lookup_cache is None:
+        _forwarder_email_lookup_cache = _load_forwarder_email_lookup_from_db()
+    return _forwarder_email_lookup_cache
+
+
+def reload_forwarder_email_lookup():
+    global _forwarder_email_lookup_cache
+    _forwarder_email_lookup_cache = None
+
+
+def init_forwarder_email_table():
+    """建表并写入初始货代邮箱对照数据（一次性运行）"""
+    initial_data = [
+        ('caozuo02@tianjinyanfeng.com',     '衍峰'),
+        ('liuying@yutongjieyun.com',         '王斌'),
+        ('yaohong@yutongjieyun.com',         '王斌'),
+        ('op6.xm@xmyuding.com',             '誉鼎'),
+        ('opfs12@everbyd.com',              '永越'),
+        ('donald.mai@everbyd.com',          '永越'),
+        ('xmphi08@163.com',                 '鑫菲航'),
+        ('zoey.zhu@hongdalogistics.com.cn', '泓大'),
+        ('2379783890@qq.com',               '于丽英'),
+        ('qdjy10@lslqd.com',                '吉永'),
+    ]
+    conn = _get_mysql_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS `forwarder_email_lookup` (
+                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                  `email_address` VARCHAR(200) NOT NULL UNIQUE,
+                  `货代` VARCHAR(100) NOT NULL
+                ) CHARACTER SET utf8mb4
+            """)
+            cur.executemany(
+                "INSERT IGNORE INTO `forwarder_email_lookup` (`email_address`, `货代`) VALUES (%s, %s)",
+                initial_data,
+            )
+            inserted = cur.rowcount
+        conn.commit()
+        print(f"forwarder_email_lookup 初始化完成，新增 {inserted} 条记录。")
+    finally:
+        conn.close()
+
+
+# ── 产品名称对照缓存 ──────────────────────────────────────────
+_product_name_lookup_cache = None
+
+
+def _load_product_name_lookup_from_db():
+    try:
+        conn = _get_mysql_conn()
+        with conn.cursor() as cur:
+            cur.execute("SELECT `keyword`, `规范产品名` FROM `product_name_lookup`")
+            rows = cur.fetchall()
+        conn.close()
+        return {kw: std for kw, std in rows}
+    except Exception:
+        return {}
+
+
+def get_product_name_lookup():
+    global _product_name_lookup_cache
+    if _product_name_lookup_cache is None:
+        _product_name_lookup_cache = _load_product_name_lookup_from_db()
+    return _product_name_lookup_cache
+
+
+def reload_product_name_lookup():
+    global _product_name_lookup_cache
+    _product_name_lookup_cache = None
+
+
+def init_product_name_table():
+    """建表并写入74条产品名称对照数据（来自Excel，一次性运行）"""
+    initial_data = [
+        ('CYCLONE WIRE',      'Cyclone Wire 勾花网'),
+        ('勾花网',             'Cyclone Wire 勾花网'),
+        ('PLYWOOD',           'Plywood 胶合板'),
+        ('胶合板',             'Plywood 胶合板'),
+        ('PHENOLIC BOARD',    'Phenolic Board 膜板'),
+        ('膜板',               'Phenolic Board 膜板'),
+        ('PVC BOARD',         'PVC Board'),
+        ('PVC板',             'PVC Board'),
+        ('SWIVEL CLAMP',      'Clamp 卡扣'),
+        ('卡扣',               'Clamp 卡扣'),
+        ('CONCRETE NAIL',     'Concrete Nails 水泥钉'),
+        ('水泥钉',             'Concrete Nails 水泥钉'),
+        ('UMBRELLA NAIL',     'Umbrella Nails 瓦楞钉'),
+        ('瓦楞钉',             'Umbrella Nails 瓦楞钉'),
+        ('JETMATIC PUMP',     'Jetmatic Pump 打水机'),
+        ('打水机',             'Jetmatic Pump 打水机'),
+        ('PLAIN BAR',         'Plain Bar 圆钢'),
+        ('圆钢',               'Plain Bar 圆钢'),
+        ('SQUARE BAR',        'Square Bar 方钢'),
+        ('方钢',               'Square Bar 方钢'),
+        ('HOG WIRE',          'Hog Wire 牛栏网'),
+        ('牛栏网',             'Hog Wire 牛栏网'),
+        ('PLASTIC CANVAS',    'Plastic Canvas 篷布'),
+        ('篷布',               'Plastic Canvas 篷布'),
+        ('CANVAS TARP',       'Plastic Canvas 篷布'),
+        ('STEEL MATTING',     'Steel Matting 铁网片'),
+        ('铁网片',             'Steel Matting 铁网片'),
+        ('STEEL MAT',         'Steel Matting 铁网片'),
+        ('WELDED WIRE MESH',  'Welded Wire Mesh 电焊网'),
+        ('电焊网',             'Welded Wire Mesh 电焊网'),
+        ('ANGLE BAR',         'Angle Bar 角钢'),
+        ('角钢',               'Angle Bar 角钢'),
+        ('ECO BOARD',         'Eco-Board 生态板'),
+        ('生态板',             'Eco-Board 生态板'),
+        ('WELDING ELECTRODE', 'Welding Electrode 电焊条'),
+        ('电焊条',             'Welding Electrode 电焊条'),
+        ('焊条',               'Welding Electrode 电焊条'),
+        ('WELDING ROD',       'Welding Electrode 电焊条'),
+        ('RESIN',             'Plastic Resin 塑料米'),
+        ('PLASTIC RESIN',     'Plastic Resin 塑料米'),
+        ('塑料米',             'Plastic Resin 塑料米'),
+        ('T BAR',             'T Bar T型钢'),
+        ('STEEL TUBE',        'Steel Tube 方管'),
+        ('方管',               'Steel Tube 方管'),
+        ('GI TUBE',           'Steel Tube 方管'),
+        ('STEEL SHEET',       'Steel Sheet 钢板'),
+        ('钢板',               'Steel Sheet 钢板'),
+        ('彩板',               'Steel Sheet 钢板'),
+        ('瓦楞板',             'Steel Sheet 钢板'),
+        ('开平板',             'Steel Sheet 钢板'),
+        ('STEEL STRIP',       'Steel Strip 带钢'),
+        ('STEEL COIL',        'Steel Strip 带钢'),
+        ('带钢',               'Steel Strip 带钢'),
+        ('STEEL PIPE',        'Steel Pipe 圆管'),
+        ('圆管',               'Steel Pipe 圆管'),
+        ('GI PIPE',           'Steel Pipe 圆管'),
+        ('UPVC DOOR',         'UPVC Door 塑料门'),
+        ('CHANNEL BAR',       'Channel Bar 槽钢'),
+        ('槽钢',               'Channel Bar 槽钢'),
+        ('BARBED WIRE',       'Barbed Wire 刺绳'),
+        ('刺绳',               'Barbed Wire 刺绳'),
+        ('STEEL WIRE',        'Steel Wire 铁丝'),
+        ('GI WIRE',           'Steel Wire 铁丝'),
+        ('铁丝',               'Steel Wire 铁丝'),
+        ('METAL PURLINS',     'Metal Purlins 龙骨'),
+        ('龙骨',               'Metal Purlins 龙骨'),
+        ('HARDWARE CLOTH',    'Hardware Cloth 方眼网'),
+        ('方眼网',             'Hardware Cloth 方眼网'),
+        ('STEEL SHOVEL',      'Steel Shovel 铁锹'),
+        ('铁锹',               'Steel Shovel 铁锹'),
+        ('PE FOAM',           'PE Foam'),
+        ('FLAT BAR',          'Flat Bar 扁钢'),
+        ('CLOUT NAIL',        'Clout Nail 油毡钉'),
+        ('WALL CLIP',         'Wall Clip'),
+    ]
+    conn = _get_mysql_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS `product_name_lookup` (
+                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                  `keyword` VARCHAR(200) NOT NULL UNIQUE,
+                  `规范产品名` VARCHAR(200) NOT NULL
+                ) CHARACTER SET utf8mb4
+            """)
+            cur.executemany(
+                "INSERT IGNORE INTO `product_name_lookup` (`keyword`, `规范产品名`) VALUES (%s, %s)",
+                initial_data,
+            )
+            inserted = cur.rowcount
+        conn.commit()
+        print(f"product_name_lookup 初始化完成，新增 {inserted} 条记录。")
+    finally:
+        conn.close()
+
+
+def _extract_forwarder_from_email(from_addr: str) -> str:
+    """从发件人邮箱地址推断货代"""
+    m = re.search(r'[\w.%+\-]+@[\w.\-]+', from_addr)
+    email_only = m.group(0).lower() if m else from_addr.lower()
+    email_lookup = get_forwarder_email_lookup()
+    if email_only in email_lookup:
+        return email_lookup[email_only]
+    addr_lower = from_addr.lower()
+    for keyword, forwarder in FORWARDER_EMAIL_MAP.items():
+        if keyword in addr_lower:
+            return forwarder
+    return ''
+
+
 # ── 解析工具函数 ──────────────────────────────────────────────
 
 def _normalize_date(s: str) -> str:
@@ -209,14 +413,22 @@ def _extract_port(text: str) -> str:
 def _extract_products(text: str) -> str:
     found = []
     text_up = text.upper()
-    for kw in sorted(PRODUCT_EN.keys(), key=len, reverse=True):
-        if kw.upper() in text_up:
-            full = PRODUCT_EN[kw]
-            if full not in found:
-                found.append(full)
-    for cn, std in PRODUCT_CN.items():
-        if cn in text and std not in found:
-            found.append(std)
+    product_lookup = get_product_name_lookup()
+    if product_lookup:
+        for kw in sorted(product_lookup.keys(), key=len, reverse=True):
+            if kw.upper() in text_up:
+                full = product_lookup[kw]
+                if full not in found:
+                    found.append(full)
+    else:
+        for kw in sorted(PRODUCT_EN.keys(), key=len, reverse=True):
+            if kw.upper() in text_up:
+                full = PRODUCT_EN[kw]
+                if full not in found:
+                    found.append(full)
+        for cn, std in PRODUCT_CN.items():
+            if cn in text and std not in found:
+                found.append(std)
     return ','.join(found) if found else ''
 
 
@@ -374,10 +586,9 @@ def parse_full_email(subject: str, from_addr: str, body_text: str,
                 result['货代'] = fw
                 break
         if not result.get('货代'):
-            for kw, fw in FORWARDER_EMAIL_MAP.items():
-                if kw in from_addr.lower():
-                    result['货代'] = fw
-                    break
+            fw = _extract_forwarder_from_email(from_addr)
+            if fw:
+                result['货代'] = fw
 
     result['发件人'] = from_addr or ''
     result['邮件主题'] = subject or ''
