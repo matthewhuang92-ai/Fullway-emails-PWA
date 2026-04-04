@@ -40,6 +40,7 @@ export const EmailAPI = {
   markRead:       (folder, id) => _fetch(`/api/emails/${encodeURIComponent(folder)}/${id}/mark-read`, { method: 'POST' }),
   forward:        (req)        => _fetch('/api/emails/forward', { method: 'POST', body: JSON.stringify(req) }),
   forwardDraft:   (req)        => _fetch('/api/emails/forward-draft', { method: 'POST', body: JSON.stringify(req) }),
+  replyAll:       (req)        => _fetch('/api/emails/reply-all', { method: 'POST', body: JSON.stringify(req) }),
 };
 
 // ── 数据库 ────────────────────────────────────────────────────

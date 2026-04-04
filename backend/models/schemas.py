@@ -111,6 +111,14 @@ class TemplateCreate(BaseModel):
     body: str
 
 
+# ── 回复全部请求 ──────────────────────────────────────────────
+
+class ReplyAllRequest(BaseModel):
+    email_id: str
+    folder: str
+    reply_body: str
+
+
 # ── 通用响应 ──────────────────────────────────────────────────
 
 class OpResult(BaseModel):

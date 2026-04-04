@@ -533,3 +533,58 @@ class EmailService:
             pass
 
         return saved, marked
+
+    def send_reply_all(self, original_email: dict, reply_body: str) -> bool:
+        """回复全部：回复给原发件人，抄送所有原收件人（不含自己），并保存到已发送"""
+        self.ensure_smtp()
+        self.ensure_imap()
+
+        import email.utils as _eu
+
+        cfg = self.config["email"]
+        my_addr = cfg["address"].lower()
+
+        orig_from_addr = _eu.parseaddr(original_email.get("from_addr", ""))[1]
+        orig_to_raw    = original_email.get("to_addr", "")
+        orig_to_addrs  = [addr for name, addr in _eu.getaddresses([orig_to_raw])
+                          if addr and addr.lower() != my_addr]
+
+        to_addrs = [orig_from_addr] if orig_from_addr else []
+        cc_addrs = [a for a in orig_to_addrs if a.lower() != orig_from_addr.lower()]
+
+        msg = MIMEMultipart()
+        msg["From"]    = formataddr(("", cfg["address"]))
+        msg["To"]      = orig_from_addr
+        if cc_addrs:
+            msg["Cc"] = ", ".join(cc_addrs)
+
+        subj = original_email.get("subject", "")
+        msg["Subject"] = f"Re: {subj}" if not subj.lower().startswith("re:") else subj
+
+        orig_section = (
+            "\n\n\n"
+            "------------------ Original ------------------\n"
+            f"From: {original_email['from_addr']}\n"
+            f"Date: {original_email['date']}\n"
+            f"To: {original_email.get('to_addr', '')}\n"
+            f"Subject: {original_email['subject']}\n"
+            "\n"
+            f"{get_email_body_text(original_email['msg'])}"
+        )
+        msg.attach(MIMEText(reply_body + orig_section, "plain", "utf-8"))
+
+        all_recipients = to_addrs + cc_addrs
+        self.smtp.sendmail(cfg["address"], all_recipients, msg.as_string())
+
+        saved = False
+        try:
+            status, _ = self.imap.append(
+                '"Sent Messages"', "\\Seen",
+                imaplib.Time2Internaldate(_time.time()),
+                msg.as_bytes()
+            )
+            saved = (status == "OK")
+        except Exception:
+            pass
+
+        return saved

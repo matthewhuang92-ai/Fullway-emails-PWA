@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from core.config import get_email_config, get_default_cc, get_forward_body
 from models.schemas import (
     EmailSummary, EmailDetail, AttachmentContent,
-    ForwardRequest, DraftRequest, SearchRequest, OpResult,
+    ForwardRequest, DraftRequest, SearchRequest, ReplyAllRequest, OpResult,
 )
 from services.email_service import (
     EmailService, attachment_to_meta, attachment_to_content,
@@ -207,5 +207,27 @@ def forward_draft(req: DraftRequest):
         raise
     except Exception as e:
         return OpResult(success=False, message=f"发送失败：{e}")
+    finally:
+        svc.disconnect()
+
+
+# ── 回复全部 ──────────────────────────────────────────────────
+
+@router.post("/reply-all", response_model=OpResult)
+def reply_all_email(req: ReplyAllRequest):
+    svc = _make_service()
+    try:
+        svc.connect_imap()
+        svc.connect_smtp()
+        e = svc.fetch_full_email(req.email_id, req.folder)
+        if not e:
+            raise HTTPException(status_code=404, detail="邮件不存在")
+        saved = svc.send_reply_all(original_email=e, reply_body=req.reply_body)
+        msg = "回复成功" + ("，已保存到已发送" if saved else "（保存已发送失败，但邮件已发出）")
+        return OpResult(success=True, message=msg)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return OpResult(success=False, message=f"回复失败：{e}")
     finally:
         svc.disconnect()

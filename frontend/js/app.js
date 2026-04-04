@@ -4,7 +4,7 @@
 import { EmailAPI, ConfigAPI, DbAPI, healthCheck, getApiBase } from './api.js';
 import { state, setState, subscribe }                           from './state.js';
 import { renderAttachment }                                     from './components/attachment-viewer.js';
-import { openForwardDialog, openDraftDialog }                   from './components/forward-dialog.js';
+import { openForwardDialog, openDraftDialog, openReplyAllDialog } from './components/forward-dialog.js';
 import { openSearchDialog }                                     from './components/search-panel.js';
 
 // ── 日志（供其他模块 import） ─────────────────────────────────
@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('chkAll').addEventListener('change', _onChkAll);
   document.getElementById('btnForwardOriginal').addEventListener('click', _onForwardOriginal);
   document.getElementById('btnForwardDraft').addEventListener('click', _onForwardDraft);
+  document.getElementById('btnReplyAll').addEventListener('click', _onReplyAll);
   document.getElementById('btnParseEmail').addEventListener('click', _onParseEmail);
   document.getElementById('btnPreviewAtt').addEventListener('click', _onPreviewAtt);
   document.getElementById('btnDownloadAtt').addEventListener('click', _onDownloadAtt);
@@ -291,6 +292,12 @@ function _onForwardDraft() {
   const email = state.selectedEmail;
   if (!email) { log('请先选择邮件', 'warn'); return; }
   openDraftDialog(email, _onEmailSent);
+}
+
+function _onReplyAll() {
+  const email = state.selectedEmail;
+  if (!email) { log('请先选择邮件', 'warn'); return; }
+  openReplyAllDialog(email, _onEmailSent);
 }
 
 function _onEmailSent(emailId) {

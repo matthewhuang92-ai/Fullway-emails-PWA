@@ -302,3 +302,59 @@ function _closeModal() {
   );
   document.getElementById('modalOverlay').style.display = 'none';
 }
+
+// ── 回复全部对话框 ────────────────────────────────────────────
+
+export function openReplyAllDialog(email, onSuccess) {
+  const html = `
+    <div class="form-group">
+      <div class="meta-subject">${_esc(email.subject)}</div>
+      <div style="font-size:12px;color:#6b7280;">
+        From: ${_esc(email.from_addr)} &nbsp;|&nbsp; ${_esc(email.date)}
+      </div>
+      <div style="font-size:12px;color:#6b7280;margin-top:2px;">
+        To: ${_esc(email.to_addr || '')}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">回复正文</label>
+      <textarea class="form-textarea" id="replyAllBody" rows="6" placeholder="请输入回复内容…"></textarea>
+    </div>
+  `;
+
+  _createModal('↩ 回复全部', html, [
+    { label: '取消', cls: 'btn', onClick: _closeModal },
+    {
+      label: '发送', cls: 'btn btn-primary', id: 'replyAllSendBtn',
+      onClick: () => _doReplyAll(email, onSuccess),
+    },
+  ]);
+}
+
+async function _doReplyAll(email, onSuccess) {
+  const modal   = document.querySelector('.modal');
+  const sendBtn = modal.querySelector('#replyAllSendBtn');
+  const body    = modal.querySelector('#replyAllBody').value.trim();
+
+  if (!body) { alert('请填写回复正文'); return; }
+
+  sendBtn.disabled = true;
+  sendBtn.innerHTML = '<span class="spinner"></span>发送中…';
+
+  try {
+    const res = await EmailAPI.replyAll({
+      email_id: email.id,
+      folder: email.folder,
+      reply_body: body,
+    });
+    _closeModal();
+    log(res.message || '回复成功');
+    if (onSuccess) onSuccess(email.id);
+  } catch (e) {
+    log('回复失败：' + e.message, 'error');
+    alert('回复失败：' + e.message);
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = '发送';
+  }
+}
