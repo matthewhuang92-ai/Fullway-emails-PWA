@@ -99,10 +99,29 @@ async function _tryAutoMatchBroker(email, selectEl, recipDiv, brokers) {
   if (!blMatch) return;
   try {
     const res = await DbAPI.getBrokerByBl(blMatch[0]);
-    if (res.broker && brokers[res.broker]) {
-      selectEl.value = res.broker;
-      const addrs = brokers[res.broker];
+    if (!res.broker) return;
+
+    const name = res.broker;
+
+    // 若下拉列表中尚无此选项（清关公司未在配置中），动态插入
+    let hasOpt = false;
+    for (const opt of selectEl.options) {
+      if (opt.value === name) { hasOpt = true; break; }
+    }
+    if (!hasOpt) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      selectEl.appendChild(opt);
+    }
+
+    selectEl.value = name;
+
+    const addrs = brokers[name] || [];
+    if (addrs.length) {
       recipDiv.innerHTML = `收件人：<b>${addrs.join(', ')}</b> <span style="color:#6b7280;">(自动匹配)</span>`;
+    } else {
+      recipDiv.innerHTML = `<span style="color:#6b7280;">(自动匹配：${_esc(name)}，请确认邮件地址已配置)</span>`;
     }
   } catch (e) {
     // 静默失败
