@@ -382,8 +382,8 @@ body {
   }
 
   .pane-list, .pane-attachment { width: 100%; flex-shrink: 0; }
-  .pane-list { height: 280px; }
-  .pane-detail { min-height: 300px; flex-shrink: 0; }
+  .pane-list { height: 160px; }
+  .pane-detail { min-height: 420px; flex-shrink: 0; }
   .pane-attachment { height: 300px; flex-shrink: 0; }
 
   .email-addr { max-width: 130px; font-size: 11px; }
