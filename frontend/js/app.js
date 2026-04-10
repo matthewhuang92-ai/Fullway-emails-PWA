@@ -404,12 +404,13 @@ function _openSettings(required = false) {
   const curEmail = localStorage.getItem('email_addr') || '';
 
   container.innerHTML = `
-    <div class="modal" style="max-width:460px;">
+    <div class="modal" style="max-width:500px;">
       <div class="modal-header">
-        <span>⚙ API 设置</span>
+        <span>⚙ 设置</span>
         ${!required ? '<button class="modal-close" id="setCloseBtn">✕</button>' : ''}
       </div>
       <div class="modal-body">
+        <div class="settings-section-title">API 连接</div>
         <div class="form-group">
           <label class="form-label">后端 API 地址</label>
           <input class="form-input" id="setBase" value="${_esc(curBase)}" placeholder="https://your-app.railway.app">
@@ -424,21 +425,87 @@ function _openSettings(required = false) {
           <input class="form-input" id="setEmail" value="${_esc(curEmail)}" placeholder="your@email.com">
         </div>
         ${required ? '<div class="settings-note" style="color:#e02424;">首次使用请先填写后端地址和 Token</div>' : ''}
+
+        <hr style="border:none;border-top:1px solid #dde1e7;margin:14px 0 10px;">
+
+        <div class="settings-section-title">清关公司管理</div>
+        <div id="brokerMgrList" style="margin-bottom:8px;"></div>
+        <div style="display:flex;gap:6px;align-items:flex-end;">
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+            <input class="form-input" id="newBrokerName" placeholder="公司名称（如 PGMC）">
+            <input class="form-input" id="newBrokerEmails" placeholder="收件邮箱，多个用逗号分隔">
+          </div>
+          <button class="btn btn-primary" id="addBrokerBtn" style="flex-shrink:0;padding:6px 12px;">添加</button>
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" id="setSaveBtn">保存并连接</button>
+        <button class="btn btn-primary" id="setSaveBtn">保存连接设置</button>
       </div>
     </div>
   `;
 
   overlay.style.display = 'block';
-
   const modal = container.querySelector('.modal');
+
+  // ── 渲染清关公司列表 ──
+  function _renderBrokerMgr() {
+    const brokers = state.brokers;
+    const listEl  = modal.querySelector('#brokerMgrList');
+    const names   = Object.keys(brokers);
+    if (!names.length) {
+      listEl.innerHTML = '<div style="color:#6b7280;font-size:12px;padding:2px 0 6px;">暂无配置，请在下方添加</div>';
+      return;
+    }
+    listEl.innerHTML = names.map(n => `
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:12px;">${_esc(n)}</div>
+          <div style="font-size:11px;color:#6b7280;word-break:break-all;">${_esc(brokers[n].join(', '))}</div>
+        </div>
+        <button class="btn btn-sm" data-del="${_esc(n)}" style="color:#e02424;flex-shrink:0;">删除</button>
+      </div>
+    `).join('');
+    listEl.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.del;
+        if (!confirm(`确认删除「${name}」？`)) return;
+        try {
+          await ConfigAPI.deleteBroker(name);
+          const b = { ...state.brokers };
+          delete b[name];
+          setState('brokers', b);
+          _renderBrokerMgr();
+          log(`已删除清关公司：${name}`);
+        } catch (e) { alert('删除失败：' + e.message); }
+      });
+    });
+  }
+  _renderBrokerMgr();
+
+  // ── 添加清关公司 ──
+  modal.querySelector('#addBrokerBtn').addEventListener('click', async () => {
+    const name      = modal.querySelector('#newBrokerName').value.trim();
+    const emailsRaw = modal.querySelector('#newBrokerEmails').value.trim();
+    if (!name)          { alert('请填写公司名称'); return; }
+    const emails = emailsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (!emails.length) { alert('请填写至少一个收件邮箱'); return; }
+    try {
+      await ConfigAPI.createBroker({ name, emails });
+      setState('brokers', { ...state.brokers, [name]: emails });
+      modal.querySelector('#newBrokerName').value   = '';
+      modal.querySelector('#newBrokerEmails').value = '';
+      _renderBrokerMgr();
+      log(`已添加清关公司：${name}`);
+    } catch (e) { alert('添加失败：' + e.message); }
+  });
+
+  // ── 关闭 ──
   const closeBtn = modal.querySelector('#setCloseBtn');
   if (closeBtn) {
     closeBtn.addEventListener('click', () => { overlay.style.display='none'; container.innerHTML=''; });
   }
 
+  // ── 保存连接设置 ──
   modal.querySelector('#setSaveBtn').addEventListener('click', async () => {
     const base  = modal.querySelector('#setBase').value.trim().replace(/\/$/, '');
     const token = modal.querySelector('#setToken').value.trim();
