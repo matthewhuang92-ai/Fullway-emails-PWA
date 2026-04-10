@@ -359,6 +359,7 @@ body {
 
 /* ── 设置对话框 ── */
 .settings-note { font-size: 11px; color: var(--text-sec); margin-top: 4px; line-height: 1.4; }
+.settings-section-title { font-weight: 600; font-size: 11px; color: var(--text-sec); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
 
 /* ── 滚动条 ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
