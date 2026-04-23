@@ -433,7 +433,11 @@ function _openSettings(required = false) {
         <div style="display:flex;gap:6px;align-items:flex-end;">
           <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
             <input class="form-input" id="newBrokerName" placeholder="公司名称（如 PGMC）">
-            <input class="form-input" id="newBrokerEmails" placeholder="收件邮箱，多个用逗号分隔">
+            <div style="display:flex;gap:10px;font-size:12px;color:#374151;">
+              <label><input type="radio" name="newBrokerChannel" value="email" checked> 邮件</label>
+              <label><input type="radio" name="newBrokerChannel" value="wechat"> 微信群</label>
+            </div>
+            <input class="form-input" id="newBrokerEmails" placeholder="收件邮箱，多个用逗号分隔（微信群可留空）">
           </div>
           <button class="btn btn-primary" id="addBrokerBtn" style="flex-shrink:0;padding:6px 12px;">添加</button>
         </div>
@@ -456,15 +460,25 @@ function _openSettings(required = false) {
       listEl.innerHTML = '<div style="color:#6b7280;font-size:12px;padding:2px 0 6px;">暂无配置，请在下方添加</div>';
       return;
     }
-    listEl.innerHTML = names.map(n => `
-      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:12px;">${_esc(n)}</div>
-          <div style="font-size:11px;color:#6b7280;word-break:break-all;">${_esc(brokers[n].join(', '))}</div>
+    listEl.innerHTML = names.map(n => {
+      const info = brokers[n] || { emails: [], channel: 'email' };
+      const isWechat = info.channel === 'wechat';
+      const badge = isWechat
+        ? '<span style="display:inline-block;background:#d1fae5;color:#047857;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;">微信群</span>'
+        : '';
+      const detail = isWechat
+        ? '通过手机系统分享到微信'
+        : (info.emails || []).join(', ') || '（未填邮箱）';
+      return `
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:12px;">${_esc(n)}${badge}</div>
+            <div style="font-size:11px;color:#6b7280;word-break:break-all;">${_esc(detail)}</div>
+          </div>
+          <button class="btn btn-sm" data-del="${_esc(n)}" style="color:#e02424;flex-shrink:0;">删除</button>
         </div>
-        <button class="btn btn-sm" data-del="${_esc(n)}" style="color:#e02424;flex-shrink:0;">删除</button>
-      </div>
-    `).join('');
+      `;
+    }).join('');
     listEl.querySelectorAll('[data-del]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const name = btn.dataset.del;
@@ -486,16 +500,17 @@ function _openSettings(required = false) {
   modal.querySelector('#addBrokerBtn').addEventListener('click', async () => {
     const name      = modal.querySelector('#newBrokerName').value.trim();
     const emailsRaw = modal.querySelector('#newBrokerEmails').value.trim();
-    if (!name)          { alert('请填写公司名称'); return; }
+    const channel   = modal.querySelector('input[name="newBrokerChannel"]:checked')?.value || 'email';
+    if (!name) { alert('请填写公司名称'); return; }
     const emails = emailsRaw.split(',').map(s => s.trim()).filter(Boolean);
-    if (!emails.length) { alert('请填写至少一个收件邮箱'); return; }
+    if (channel === 'email' && !emails.length) { alert('邮件渠道需要至少一个收件邮箱'); return; }
     try {
-      await ConfigAPI.createBroker({ name, emails });
-      setState('brokers', { ...state.brokers, [name]: emails });
+      await ConfigAPI.createBroker({ name, emails, channel });
+      setState('brokers', { ...state.brokers, [name]: { emails: channel === 'wechat' ? [] : emails, channel } });
       modal.querySelector('#newBrokerName').value   = '';
       modal.querySelector('#newBrokerEmails').value = '';
       _renderBrokerMgr();
-      log(`已添加清关公司：${name}`);
+      log(`已添加清关公司：${name}（${channel === 'wechat' ? '微信群' : '邮件'}）`);
     } catch (e) { alert('添加失败：' + e.message); }
   });
 

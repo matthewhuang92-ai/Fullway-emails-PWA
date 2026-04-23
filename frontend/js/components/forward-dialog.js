@@ -5,14 +5,30 @@ import { EmailAPI, DbAPI, ConfigAPI } from '../api.js';
 import { state } from '../state.js';
 import { log } from '../app.js';
 
+// ── 渠道相关辅助 ─────────────────────────────────────────────
+
+function _getBrokerInfo(brokers, name) {
+  const raw = brokers[name];
+  if (!raw) return { emails: [], channel: 'email' };
+  // 新结构 {emails, channel}；容忍旧结构 [email,...]
+  if (Array.isArray(raw)) return { emails: raw, channel: 'email' };
+  return { emails: raw.emails || [], channel: raw.channel || 'email' };
+}
+
+function _brokerOptionHtml(name, info) {
+  const suffix = info.channel === 'wechat' ? ' [微信群]' : '';
+  return `<option value="${name}" data-channel="${info.channel}">${name}${suffix}</option>`;
+}
+
+function _canShareFiles() {
+  return !!(navigator.canShare && navigator.share);
+}
+
 export function openForwardDialog(email, onSuccess) {
   const brokers = state.brokers;
   const brokerNames = Object.keys(brokers);
   const defaultBody = state.defaults.forward_body || '';
   const defaultCc   = (state.defaults.cc || []).join(', ');
-
-  // 自动匹配清关公司（从 BL 号查数据库，异步更新）
-  let autoMatchedBroker = '';
 
   const attItems = (email.attachments || []).map((a, i) =>
     `<label class="att-check-item">
@@ -21,7 +37,9 @@ export function openForwardDialog(email, onSuccess) {
     </label>`
   ).join('');
 
-  const brokerOptions = brokerNames.map(n => `<option value="${n}">${n}</option>`).join('');
+  const brokerOptions = brokerNames
+    .map(n => _brokerOptionHtml(n, _getBrokerInfo(brokers, n)))
+    .join('');
 
   const html = `
     <div class="form-group">
@@ -66,7 +84,15 @@ export function openForwardDialog(email, onSuccess) {
     { label: '取消', cls: 'btn', onClick: _closeModal },
     {
       label: '发送', cls: 'btn btn-primary', id: 'fwdSendBtn',
-      onClick: () => _doForward(email, onSuccess),
+      onClick: () => {
+        const broker = modal.querySelector('#brokerSelect').value;
+        const info = _getBrokerInfo(state.brokers, broker);
+        if (info.channel === 'wechat') {
+          _doWechatShare(email, onSuccess);
+        } else {
+          _doForward(email, onSuccess);
+        }
+      },
     },
   ]);
 
@@ -78,22 +104,40 @@ export function openForwardDialog(email, onSuccess) {
     modal.querySelectorAll('.att-sel-chk').forEach(c => c.checked = false);
   });
 
-  // 清关公司选择 → 显示邮件地址
+  // 清关公司选择 → 显示渠道 / 邮件地址
   const brokerSel = modal.querySelector('#brokerSelect');
   const recipDiv  = modal.querySelector('#brokerRecipients');
+  const sendBtn   = modal.querySelector('#fwdSendBtn');
+  const ccInput   = modal.querySelector('#fwdCc');
   brokerSel.addEventListener('change', () => {
-    const name = brokerSel.value;
-    const addrs = brokers[name] || [];
-    recipDiv.innerHTML = addrs.length
-      ? `收件人：<b>${addrs.join(', ')}</b>`
-      : '';
+    _applyBrokerChannel(brokerSel.value, state.brokers, recipDiv, sendBtn, ccInput);
   });
 
   // 尝试自动匹配 BL 号
-  _tryAutoMatchBroker(email, brokerSel, recipDiv, brokers);
+  _tryAutoMatchBroker(email, brokerSel, recipDiv, brokers, sendBtn, ccInput);
 }
 
-async function _tryAutoMatchBroker(email, selectEl, recipDiv, brokers) {
+function _applyBrokerChannel(name, brokers, recipDiv, sendBtn, ccInput) {
+  if (!name) {
+    recipDiv.innerHTML = '';
+    if (sendBtn) sendBtn.textContent = '发送';
+    if (ccInput) ccInput.disabled = false;
+    return;
+  }
+  const info = _getBrokerInfo(brokers, name);
+  if (info.channel === 'wechat') {
+    recipDiv.innerHTML = '📲 <span style="color:#047857;">此清关公司走微信群：点击下方按钮后在系统分享面板选择"微信"</span>';
+    if (sendBtn) sendBtn.textContent = '📲 分享到微信';
+    if (ccInput) { ccInput.disabled = true; ccInput.value = ''; }
+  } else {
+    const addrs = info.emails;
+    recipDiv.innerHTML = addrs.length ? `收件人：<b>${addrs.join(', ')}</b>` : '';
+    if (sendBtn) sendBtn.textContent = '发送';
+    if (ccInput) ccInput.disabled = false;
+  }
+}
+
+async function _tryAutoMatchBroker(email, selectEl, recipDiv, brokers, sendBtn, ccInput) {
   // 从 subject 中提取 BL 号
   const blMatch = email.subject.match(/\b(2\d{8}|SITTAG[A-Z]{2}\d{6,8}|SITG[A-Z]{4}\d{6,8}|OOLU[A-Z0-9]{8,12}|COAU\d{10,13}|MCLP[A-Z0-9]{8,12}|CNHU[A-Z0-9]{8,12}|EGLV[A-Z0-9]{8,12}|HLCU[A-Z0-9]{8,12}|MAEU[A-Z0-9]{8,12})\b/i);
   if (!blMatch) return;
@@ -102,6 +146,7 @@ async function _tryAutoMatchBroker(email, selectEl, recipDiv, brokers) {
     if (!res.broker) return;
 
     const name = res.broker;
+    const info = _getBrokerInfo(brokers, name);
 
     // 若下拉列表中尚无此选项（清关公司未在配置中），动态插入
     let hasOpt = false;
@@ -111,20 +156,81 @@ async function _tryAutoMatchBroker(email, selectEl, recipDiv, brokers) {
     if (!hasOpt) {
       const opt = document.createElement('option');
       opt.value = name;
-      opt.textContent = name;
+      opt.textContent = name + (info.channel === 'wechat' ? ' [微信群]' : '');
+      opt.dataset.channel = info.channel;
       selectEl.appendChild(opt);
     }
 
     selectEl.value = name;
+    _applyBrokerChannel(name, brokers, recipDiv, sendBtn, ccInput);
 
-    const addrs = brokers[name] || [];
-    if (addrs.length) {
-      recipDiv.innerHTML = `收件人：<b>${addrs.join(', ')}</b> <span style="color:#6b7280;">(自动匹配)</span>`;
+    // 在自动匹配的基础上追加 "自动匹配" 角标
+    if (info.channel !== 'wechat') {
+      const suffix = info.emails.length
+        ? ` <span style="color:#6b7280;">(自动匹配)</span>`
+        : ` <span style="color:#6b7280;">(自动匹配：${_esc(name)}，请确认邮件地址已配置)</span>`;
+      recipDiv.innerHTML = (recipDiv.innerHTML || `<span style="color:#6b7280;">(自动匹配：${_esc(name)})</span>`) + suffix;
     } else {
-      recipDiv.innerHTML = `<span style="color:#6b7280;">(自动匹配：${_esc(name)}，请确认邮件地址已配置)</span>`;
+      recipDiv.innerHTML += ' <span style="color:#6b7280;">(自动匹配)</span>';
     }
   } catch (e) {
     // 静默失败
+  }
+}
+
+// ── 微信分享（Web Share API） ────────────────────────────────
+
+async function _doWechatShare(email, onSuccess) {
+  const modal   = document.querySelector('.modal');
+  const sendBtn = modal.querySelector('#fwdSendBtn');
+  const broker  = modal.querySelector('#brokerSelect').value;
+  const body    = modal.querySelector('#fwdBody')?.value.trim() || '';
+  const checked = [...modal.querySelectorAll('.att-sel-chk:checked')].map(c => parseInt(c.value));
+
+  if (!broker) { alert('请选择清关公司'); return; }
+  if (!_canShareFiles()) {
+    alert('当前浏览器不支持系统级文件分享。请用手机浏览器打开 PWA，或手动下载附件后在微信中发送。');
+    return;
+  }
+
+  sendBtn.disabled = true;
+  sendBtn.innerHTML = '<span class="spinner"></span>准备文件…';
+
+  try {
+    const files = [];
+    for (const idx of checked) {
+      const res = await EmailAPI.getAttachment(email.folder, email.id, idx);
+      const bytes = Uint8Array.from(atob(res.data_base64), c => c.charCodeAt(0));
+      const type = res.content_type || 'application/octet-stream';
+      files.push(new File([bytes], res.filename, { type }));
+    }
+
+    const sharePayload = {
+      title: email.subject || '',
+      text: body || email.subject || '',
+    };
+    if (files.length) sharePayload.files = files;
+
+    if (files.length && !navigator.canShare(sharePayload)) {
+      alert('当前浏览器不允许分享这些文件。请用手机浏览器打开，或手动下载附件后发送。');
+      return;
+    }
+
+    await navigator.share(sharePayload);
+    _closeModal();
+    log(`已唤起系统分享到微信（${broker}）`);
+    if (onSuccess) onSuccess(email.id);
+  } catch (e) {
+    // 用户取消分享不视为失败
+    if (e && e.name === 'AbortError') {
+      log('已取消分享');
+    } else {
+      log('分享失败：' + (e?.message || e), 'error');
+      alert('分享失败：' + (e?.message || e));
+    }
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = '📲 分享到微信';
   }
 }
 
@@ -137,7 +243,8 @@ async function _doForward(email, onSuccess) {
   const checked  = [...modal.querySelectorAll('.att-sel-chk:checked')].map(c => parseInt(c.value));
 
   if (!broker) { alert('请选择清关公司'); return; }
-  const toAddrs = state.brokers[broker] || [];
+  const info = _getBrokerInfo(state.brokers, broker);
+  const toAddrs = info.emails;
   if (!toAddrs.length) { alert('清关公司没有邮件地址'); return; }
 
   const ccAddrs = ccRaw.split(',').map(s => s.trim()).filter(Boolean);
@@ -174,7 +281,9 @@ export function openDraftDialog(email, onSuccess) {
   const brokerNames = Object.keys(brokers);
   const templates   = state.templates;
 
-  const brokerOptions = brokerNames.map(n => `<option value="${n}">${n}</option>`).join('');
+  const brokerOptions = brokerNames
+    .map(n => _brokerOptionHtml(n, _getBrokerInfo(brokers, n)))
+    .join('');
   const tplButtons = templates.map(t =>
     `<button type="button" class="tpl-btn" data-body="${_esc(t.body)}">
        <span class="tpl-name">${_esc(t.name)}</span>
@@ -226,11 +335,15 @@ export function openDraftDialog(email, onSuccess) {
   const recipDiv  = modal.querySelector('#draftBrokerRecipients');
   brokerSel.addEventListener('change', () => {
     const name = brokerSel.value;
-    const addrs = brokers[name] || [];
-    recipDiv.innerHTML = addrs.length ? `收件人：<b>${addrs.join(', ')}</b>` : '';
+    const info = _getBrokerInfo(brokers, name);
+    if (info.channel === 'wechat') {
+      recipDiv.innerHTML = '📲 <span style="color:#047857;">微信群清关公司不支持草稿模式，请用"转发正本"走微信分享</span>';
+    } else {
+      recipDiv.innerHTML = info.emails.length ? `收件人：<b>${info.emails.join(', ')}</b>` : '';
+    }
   });
 
-  _tryAutoMatchBroker(email, brokerSel, recipDiv, brokers);
+  _tryAutoMatchBroker(email, brokerSel, recipDiv, brokers, null, null);
 }
 
 async function _doDraftSend(email, onSuccess) {
@@ -241,7 +354,12 @@ async function _doDraftSend(email, onSuccess) {
 
   if (!broker) { alert('请选择清关公司'); return; }
   if (!body)   { alert('请填写邮件正文'); return; }
-  const toAddrs = state.brokers[broker] || [];
+  const info = _getBrokerInfo(state.brokers, broker);
+  if (info.channel === 'wechat') {
+    alert('微信群清关公司不支持草稿模式，请改用"转发正本"走微信分享');
+    return;
+  }
+  const toAddrs = info.emails;
   if (!toAddrs.length) { alert('清关公司没有邮件地址'); return; }
 
   sendBtn.disabled = true;

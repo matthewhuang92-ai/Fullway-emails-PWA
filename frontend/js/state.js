@@ -6,7 +6,7 @@ export const state = {
   emails: [],           // 邮件列表
   selectedEmail: null,  // 当前选中邮件（完整对象）
   checkedIds: new Set(),// 勾选的邮件 id
-  brokers: {},          // { name: [email,...] }
+  brokers: {},          // { name: { emails: [email,...], channel: 'email'|'wechat' } }
   templates: [],        // [{ name, body }]
   defaults: {},         // { cc: [], forward_body: "" }
   loading: false,

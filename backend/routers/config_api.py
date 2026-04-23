@@ -30,14 +30,14 @@ def list_brokers():
 @router.post("/brokers", response_model=OpResult)
 def create_broker(req: BrokerCreate):
     _init()
-    ok = upsert_broker(req.name, req.emails)
+    ok = upsert_broker(req.name, req.emails, req.channel)
     return OpResult(success=ok, message="已保存" if ok else "保存失败")
 
 
 @router.put("/brokers/{name}", response_model=OpResult)
 def update_broker(name: str, req: BrokerCreate):
     _init()
-    ok = upsert_broker(name, req.emails)
+    ok = upsert_broker(name, req.emails, req.channel)
     return OpResult(success=ok, message="已更新" if ok else "更新失败")
 
 

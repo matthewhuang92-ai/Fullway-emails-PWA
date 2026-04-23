@@ -40,8 +40,8 @@ LINE_KEYWORDS = [
 ]
 
 CONSIGNEE_BROKER = {
-    'FULLWAY': 'Alin', 'MAXWAY': 'Arden', 'POWERWAY': 'PGMC',
-    'GRANDWAY': 'PGMC', 'UNIONBAY': 'Unionbay施工队',
+    'MAXWAY': 'Arden', 'POWERWAY': 'PGMC', 'GRANDWAY': 'PGMC',
+    'UNIONBAY': 'Unionbay 施安定',
     'LFM': 'LFM', 'KRT CONSUMER GOODS': 'Arden', 'KRT': 'KRT', 'GBC': 'GBC',
 }
 
@@ -200,6 +200,181 @@ def init_forwarder_email_table():
             inserted = cur.rowcount
         conn.commit()
         print(f"forwarder_email_lookup 初始化完成，新增 {inserted} 条记录。")
+    finally:
+        conn.close()
+
+
+# ── Consignee 精确对照缓存 ────────────────────────────────────
+_consignee_lookup_cache = None
+
+
+def _load_consignee_lookup_from_db():
+    try:
+        conn = _get_mysql_conn()
+        with conn.cursor() as cur:
+            cur.execute("SELECT `consignee_name`, `清关公司` FROM `consignee_lookup`")
+            rows = cur.fetchall()
+        conn.close()
+        return {name.upper(): broker for name, broker in rows}
+    except Exception:
+        return {}
+
+
+def get_consignee_lookup():
+    global _consignee_lookup_cache
+    if _consignee_lookup_cache is None:
+        _consignee_lookup_cache = _load_consignee_lookup_from_db()
+    return _consignee_lookup_cache
+
+
+def reload_consignee_lookup():
+    global _consignee_lookup_cache
+    _consignee_lookup_cache = None
+
+
+def init_consignee_table():
+    """建表并写入初始 Consignee 对照数据（一次性运行）"""
+    initial_data = [
+        ('VESTA DRY GOODS TRADING', 'Gacutno'),
+        ('BRIGHTLANE HOUSEHOLD SUPPLIES TRADING', 'PGMC'),
+        ('EZELEA CONSUMER GOODS TRADING', 'PGMC'),
+        ('LAO HOMELAND HARDWARE', 'PGMC'),
+        ('JHI IMPORT EXPORT TRADING', 'PGMC'),
+        ('SEEM INTERNATIONAL CORP.', 'Alin'),
+        ('AC EIGHT CONSUMER GOODS TRADING', 'Arden'),
+        ('BAP 888 CONSUMER GOODS TRADING', 'Arden'),
+        ('KRT CONSUMER GOODS TRADING', 'Arden'),
+        ('MARINOLD CONSUMER GOODS TRADING', 'Jerry'),
+        ('MINASO DRY GOODS TRADING', 'Queo'),
+        ('STUD CONSUMER GOODS TRADING', 'SDU'),
+        ('VJK INTERNATIONAL IMPEX CORPORATION', 'Dahlia'),
+        ('RODS SAGITTARIUS DRY GOODS TRADING', 'Emman'),
+        ('PROVENIO MARKETING CORP.', 'Alin'),
+        ('ALPHA STEELS ENTERPRISES CORPORATION', 'AP'),
+        ('ARKKYL CONSUMER GOODS TRADING', 'Andrew'),
+        ('SMALL GIANTS TRADING CORP.', 'Andrew'),
+        ('LFM CONSUMER GOODS TRADING', 'Dash'),
+        ('REVENUERO CONSUMER GOODS TRADING', 'Dash'),
+        ('TIANTIAN GLOBAL FOOD PRODUCTS TRADING', 'Skylink'),
+        ('FLC CONSUMER GOODS TRADING', 'Unionbay 施安定'),
+        ('OEL LOGISTICS AND FORWARDING INC.', 'Unionbay 施安定'),
+    ]
+    conn = _get_mysql_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS `consignee_lookup` (
+                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                  `consignee_name` VARCHAR(200) NOT NULL UNIQUE,
+                  `清关公司` VARCHAR(100) NOT NULL
+                ) CHARACTER SET utf8mb4
+            """)
+            cur.executemany(
+                "INSERT IGNORE INTO `consignee_lookup` (`consignee_name`, `清关公司`) VALUES (%s, %s)",
+                initial_data,
+            )
+            inserted = cur.rowcount
+        conn.commit()
+        print(f"consignee_lookup 初始化完成，新增 {inserted} 条记录。")
+    finally:
+        conn.close()
+
+
+# ── 清关公司邮箱 / 微信渠道对照缓存 ─────────────────────────────
+_broker_email_lookup_cache = None
+_wechat_broker_cache = None
+
+
+def _load_broker_lookup_from_db():
+    """从 broker_email_lookup 表加载，返回 (email_dict, wechat_set)。"""
+    try:
+        conn = _get_mysql_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT `broker_name`, `email_address`, `channel` "
+                "FROM `broker_email_lookup` ORDER BY `id`"
+            )
+            rows = cur.fetchall()
+        conn.close()
+        email_dict: dict[str, list[str]] = {}
+        wechat_set: set[str] = set()
+        for name, email, channel in rows:
+            if channel == 'wechat':
+                wechat_set.add(name)
+            elif email:
+                email_dict.setdefault(name, []).append(email)
+            else:
+                email_dict.setdefault(name, [])
+        return email_dict, wechat_set
+    except Exception:
+        return {}, set()
+
+
+def _ensure_broker_lookup():
+    global _broker_email_lookup_cache, _wechat_broker_cache
+    if _broker_email_lookup_cache is None:
+        _broker_email_lookup_cache, _wechat_broker_cache = _load_broker_lookup_from_db()
+
+
+def get_broker_emails() -> dict[str, list[str]]:
+    _ensure_broker_lookup()
+    return _broker_email_lookup_cache or {}
+
+
+def get_wechat_brokers() -> set[str]:
+    _ensure_broker_lookup()
+    return _wechat_broker_cache or set()
+
+
+def reload_broker_emails():
+    global _broker_email_lookup_cache, _wechat_broker_cache
+    _broker_email_lookup_cache = None
+    _wechat_broker_cache = None
+
+
+def init_broker_email_table():
+    """建表并写入初始清关公司数据（一次性运行）"""
+    initial_data = [
+        ('Gacutno',        'jagacutno.lcb69@gmail.com',          'email'),
+        ('PGMC',           'bonjaperson@yahoo.com',              'email'),
+        ('PGMC',           'gbcb_srassoccha@yahoo.com',          'email'),
+        ('PGMC',           'loistava_global@yahoo.com',          'email'),
+        ('Arden',          'krttrading@yahoo.com',               'email'),
+        ('Arden',          'jakeuberdon@yahoo.com',              'email'),
+        ('Queo',           'wavephilip@yahoo.com',               'email'),
+        ('Dahlia',         'kishera_angel05@yahoo.com',          'email'),
+        ('Emman',          'emman_tagumpay@yahoo.com',           'email'),
+        ('Andrew',         'ajbroker888@yahoo.com',              'email'),
+        ('Dash',           'ling@dashcargologistics.com',        'email'),
+        ('Dash',           'operations@dashcargologistics.com',  'email'),
+        ('Goldrichline',   'goldrichline.rc@gmail.com',          'email'),
+        ('Alin',           '',                                   'wechat'),
+        ('Jerry',          '',                                   'wechat'),
+        ('SDU',            '',                                   'wechat'),
+        ('AP',             '',                                   'wechat'),
+        ('Skylink',        '',                                   'wechat'),
+        ('Unionbay 施安定', '',                                  'wechat'),
+    ]
+    conn = _get_mysql_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS `broker_email_lookup` (
+                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                  `broker_name` VARCHAR(100) NOT NULL,
+                  `email_address` VARCHAR(255) NOT NULL DEFAULT '',
+                  `channel` VARCHAR(20) NOT NULL DEFAULT 'email',
+                  UNIQUE KEY `uq_broker_email` (`broker_name`, `email_address`)
+                ) CHARACTER SET utf8mb4
+            """)
+            cur.executemany(
+                "INSERT IGNORE INTO `broker_email_lookup` "
+                "(`broker_name`, `email_address`, `channel`) VALUES (%s, %s, %s)",
+                initial_data,
+            )
+            inserted = cur.rowcount
+        conn.commit()
+        print(f"broker_email_lookup 初始化完成，新增 {inserted} 条记录。")
     finally:
         conn.close()
 
@@ -453,18 +628,26 @@ def _extract_factories(text: str) -> str:
 # ── 核心解析函数 ──────────────────────────────────────────────
 
 def parse_email_text(text: str) -> dict:
+    """解析单段文本（标题/正文/附件），返回字段字典。"""
     result = {}
     text_up = text.upper()
 
+    # 1. 提单号 — 主模式
     bl_patterns = [
         r'\b(2\d{8})\b',
-        r'\b(SITTAG[A-Z]{2}\d{6,8})\b', r'\b(SITG[A-Z]{4}\d{6,8})\b',
-        r'\b(OOLU[A-Z0-9]{8,12})\b', r'\b(COAU\d{10,13})\b',
-        r'\b(MCLP[A-Z0-9]{8,12})\b', r'\b(CNHU[A-Z0-9]{8,12})\b',
-        r'\b(EGLV[A-Z0-9]{8,12})\b', r'\b(HLCU[A-Z0-9]{8,12})\b',
-        r'\b(MAEU[A-Z0-9]{8,12})\b', r'\b(CNH\d{7,10})\b',
-        r'(?:提单号[：:]|提单[：:]?|B[/]?L[#\s]*[：:]?)\s*([A-Z][A-Z0-9]{7,14})',
-        r'\b([A-Z]{4}[A-Z0-9]{8,12})\b', r'\b(\d{12,13})\b',
+        r'\b(SITTAG[A-Z]{2}\d{6,8})\b',
+        r'\b(SITG[A-Z]{4}\d{6,8})\b',
+        r'\b(OOLU[A-Z0-9]{8,12})\b',
+        r'\b(COAU\d{10,13})\b',
+        r'\b(MCLP[A-Z0-9]{8,12})\b',
+        r'\b(CNHU[A-Z0-9]{8,12})\b',
+        r'\b(EGLV[A-Z0-9]{8,12})\b',
+        r'\b(HLCU[A-Z0-9]{8,12})\b',
+        r'\b(MAEU[A-Z0-9]{8,12})\b',
+        r'\b(CNH\d{7,10})\b',
+        r'(?:提单号[：:]|提单[：:]?|B[/]?L[#\s]*[：:]?)\s*([A-Z0-9]{8,15})',
+        r'\b([A-Z]{4}[A-Z0-9]{8,12})\b',
+        r'\b(\d{12,13})\b',
     ]
     for pat in bl_patterns:
         m = re.search(pat, text_up)
@@ -475,7 +658,31 @@ def parse_email_text(text: str) -> dict:
             result['B/L No.'] = bl
             break
 
-    if 'B/L No.' in result:
+    # 主模式未命中 → 兜底模式 + 排除词过滤
+    if 'B/L No.' not in result:
+        known_containers = set(re.findall(r'\b([A-Z]{4}\d{7})\b', text_up))
+        exclude_words = set()
+        exclude_words.update(k.upper() for k in PORT_MAP.keys())
+        exclude_words.update(line.upper() for _, line in LINE_KEYWORDS)
+        exclude_words.update({'GP', 'HC', 'HQ', 'ETD', 'ETA', 'BL', 'POD', 'POL'})
+        for m in re.finditer(r'\b([A-Z]{1,6}[0-9][A-Z0-9]{5,13})\b', text_up):
+            candidate = m.group(1)
+            if re.match(r'^[A-Z]{4}\d{7}$', candidate):
+                continue
+            if candidate in known_containers:
+                continue
+            if re.match(r'^[A-Z]+$', candidate):
+                continue
+            if re.match(r'^\d{2}[A-Z]{2,3}$', candidate):
+                continue
+            if candidate in exclude_words:
+                continue
+            result['B/L No.'] = candidate
+            result['_bl_fallback'] = True
+            break
+
+    # 2. 从 BL 推断船公司和港口
+    if result.get('B/L No.'):
         bl = result['B/L No.']
         line = _bl_to_line(bl)
         if line:
@@ -484,19 +691,41 @@ def parse_email_text(text: str) -> dict:
         if port:
             result['_port_from_bl'] = port
 
+    # 3. 集装箱号
     containers = [c for c in re.findall(r'\b([A-Z]{4}\d{7})\b', text_up)
                   if c not in result.get('B/L No.', '')]
     if containers:
         result['Container No.'] = '\n'.join(containers)
 
+    # 4. 集装箱规格和数量
     if '胶合板' in text:
         result['集装箱规格'] = '40HC'
+        box_m = re.search(r'(\d+)\s*[xX×*＊]\s*(20GP|40H[CQ]|20\'?GP|40\'?H[CQ])', text_up)
+        if box_m:
+            result['集装箱数量'] = box_m.group(1)
+        else:
+            box_n = re.search(r'[（(](\d+)柜', text)
+            if box_n:
+                result['集装箱数量'] = box_n.group(1)
     else:
         box_m = re.search(r'(\d+)\s*[xX×*＊]\s*(20GP|40H[CQ]|20\'?GP|40\'?H[CQ])', text_up)
         if box_m:
             result['集装箱数量'] = box_m.group(1)
             result['集装箱规格'] = _normalize_box(box_m.group(2))
+        else:
+            size_cn = re.search(r'(\d+)(小|高)', text)
+            if size_cn:
+                result['集装箱数量'] = size_cn.group(1)
+                result['集装箱规格'] = '20GP' if size_cn.group(2) == '小' else '40HC'
+            else:
+                box_type = re.search(r'\b(20GP|40H[CQ])\b', text_up)
+                if box_type:
+                    result['集装箱规格'] = _normalize_box(box_type.group(1))
+                box_n = re.search(r'[（(](\d+)柜', text)
+                if box_n and '集装箱数量' not in result:
+                    result['集装箱数量'] = box_n.group(1)
 
+    # 5. 目的港口
     port = _extract_port(text)
     if port:
         result['POD'] = port
@@ -504,26 +733,41 @@ def parse_email_text(text: str) -> dict:
         result['POD'] = result['_port_from_bl']
     result.pop('_port_from_bl', None)
 
+    # 6. 船公司 — 避免 SITG 开头 BL 误识别成 SITC
     if 'Shipping Line' not in result:
         for kw, line in LINE_KEYWORDS:
             if kw in text_up:
+                if kw == 'SITC' and re.search(r'SITG[A-Z]', text_up) and 'SITC' not in text_up.split():
+                    continue
                 result['Shipping Line'] = line
                 break
 
+    # 7. 日期 — ETD（含船期、X.X计划兜底）、ETA
     etd_m = re.search(
-        r'(?:ETD|装箱时间|开船时间)[：:\s/]*(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\s*[A-Za-z]{3}\s*\d{0,4}|\d{1,2}[./]\d{1,2})',
+        r'(?:ETD|装箱时间|开船时间)[：:\s/]*'
+        r'(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\s*[A-Za-z]{3}\s*\d{0,4}|\d{1,2}[./]\d{1,2})',
         text
     )
     if etd_m:
         result['ETD'] = _normalize_date(etd_m.group(1))
+    if 'ETD' not in result:
+        cq_m = re.search(r'船期[：:\s]*(\d{1,2}[./]\d{1,2}|\d{4}[/-]\d{1,2}[/-]\d{1,2})', text)
+        if cq_m:
+            result['ETD'] = _normalize_date(cq_m.group(1))
+    if 'ETD' not in result:
+        plan_m = re.search(r'^(\d{1,2}[./]\d{1,2})计划', text.strip())
+        if plan_m:
+            result['ETD'] = _normalize_date(plan_m.group(1))
 
     eta_m = re.search(
-        r'ETA[：:\s/]*(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\s*[A-Za-z]{3}\s*\d{0,4}|\d{1,2}[./]\d{1,2})',
+        r'ETA[：:\s/]*'
+        r'(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\s*[A-Za-z]{3}\s*\d{0,4}|\d{1,2}[./]\d{1,2})',
         text_up
     )
     if eta_m:
         result['ETA'] = _normalize_date(eta_m.group(1))
 
+    # 8. 品名
     if '胶合板' in text:
         result['品名'] = 'Plywood 胶合板'
     else:
@@ -531,25 +775,87 @@ def parse_email_text(text: str) -> dict:
         if products:
             result['品名'] = products
 
-    for key, broker in CONSIGNEE_BROKER.items():
-        if key in text_up:
+    # 9. Consignee + 清关公司 — 先 DB 精确全称匹配（长度降序），后硬编码兜底
+    lookup = get_consignee_lookup()
+    for name_upper, broker in sorted(lookup.items(), key=lambda x: len(x[0]), reverse=True):
+        if name_upper in text_up:
+            result['Consignee'] = name_upper
             result['清关公司'] = broker
+            result['_consignee_source'] = 'db'
             break
+    if '清关公司' not in result:
+        for key, broker in CONSIGNEE_BROKER.items():
+            if key in text_up:
+                result['清关公司'] = broker
+                result['_consignee_source'] = 'fallback'
+                break
 
+    # 10. 货代（显示名中的中文关键词）
     for key, forwarder in FORWARDER_MAP.items():
         if key in text:
             result['货代'] = forwarder
             break
 
-    factory = _extract_factories(text)
-    if factory:
-        result['Factory'] = factory
+    # 11. 合同号
+    contract_m = re.search(r'\b(\d{2}[A-Z]{3}\d{3,4})\b', text_up)
+    if contract_m:
+        result['合同号'] = contract_m.group(1)
 
+    # 12. 工厂 — 先显式"工厂："前缀，再扫描关键词合并
+    factory_m = re.search(r'工厂[：:]\s*(\S+)', text)
+    if factory_m:
+        explicit = factory_m.group(1)
+        scanned = _extract_factories(text)
+        if scanned and explicit not in scanned:
+            result['Factory'] = explicit + ' ' + scanned
+        else:
+            result['Factory'] = scanned if scanned else explicit
+    else:
+        scanned = _extract_factories(text)
+        if scanned:
+            result['Factory'] = scanned
+
+    # 13. 免柜期
     free_m = re.search(r'(\d+)\s*[+＋]\s*(\d+)', text)
     if free_m:
         result['Free Demurage'] = free_m.group(1)
         result['Free Detention'] = free_m.group(2)
 
+    # 14. Shipper
+    shipper_patterns = [
+        r'SHIPPER[：:/\s]+([A-Z][A-Z0-9 .,&\'-]{3,60}?)(?:\n|$|CONSIGNEE|NOTIFY|ADDRESS)',
+        r'发货人[：:\s]+(.{3,40}?)(?:\n|$)',
+    ]
+    for pat in shipper_patterns:
+        shipper_m = re.search(pat, text_up if 'SHIPPER' in pat.upper() else text)
+        if shipper_m:
+            shipper_val = shipper_m.group(1).strip().rstrip('.,;')
+            if len(shipper_val) >= 3:
+                result['Shipper'] = shipper_val
+            break
+
+    # 15. Consignee 兜底（DB 未命中时从关键词/标题格式提取）
+    if 'Consignee' not in result:
+        consignee_m = re.search(
+            r'-([A-Z][A-Z ]{4,50}(?:TRADING|INC\.?|CORP\.?|CO\.?|GOODS))\s*$',
+            text_up
+        )
+        if consignee_m:
+            result['Consignee'] = consignee_m.group(1).strip()
+    if 'Consignee' not in result:
+        cons_patterns = [
+            r'CONSIGNEE[：:/\s]+([A-Z][A-Z0-9 .,&\'-]{3,60}?)(?:\n|$|NOTIFY|ADDRESS|PORT)',
+            r'收货人[：:\s]+(.{3,40}?)(?:\n|$)',
+        ]
+        for pat in cons_patterns:
+            cons_m = re.search(pat, text_up if 'CONSIGNEE' in pat.upper() else text)
+            if cons_m:
+                cons_val = cons_m.group(1).strip().rstrip('.,;')
+                if len(cons_val) >= 3:
+                    result['Consignee'] = cons_val
+                break
+
+    # 16. Days to ETA
     if result.get('ETA') and len(result['ETA']) == 10:
         try:
             eta_d = datetime.strptime(result['ETA'], '%Y-%m-%d').date()
@@ -561,25 +867,60 @@ def parse_email_text(text: str) -> dict:
     return result
 
 
-def _merge(base: dict, override: dict) -> dict:
+def merge_results(base: dict, override: dict) -> dict:
+    """合并两份解析结果：override 补齐 base 的空值。
+    Consignee / 清关公司：DB 精确匹配可以覆盖硬编码兜底。
+    """
     merged = dict(base)
     for k, v in override.items():
-        if not k.startswith('_') and v and not merged.get(k):
+        if k.startswith('_'):
+            continue
+        if v and (not merged.get(k)):
             merged[k] = v
+        elif k in ('Consignee', '清关公司') and v:
+            if (override.get('_consignee_source') == 'db'
+                    and merged.get('_consignee_source') == 'fallback'):
+                merged[k] = v
+    if (override.get('_consignee_source') == 'db'
+            and merged.get('_consignee_source') == 'fallback'):
+        merged['_consignee_source'] = 'db'
     return merged
+
+
+# 向后兼容的旧别名
+_merge = merge_results
 
 
 def parse_full_email(subject: str, from_addr: str, body_text: str,
                      attachment_texts: list[dict] | None = None) -> dict:
+    """综合解析：标题 → 正文 → 附件，标题识别到的 BL 始终优先。"""
     if attachment_texts is None:
         attachment_texts = []
+
+    # 第一优先级：标题
     result = parse_email_text(subject or '')
+    subject_bl = result.get('B/L No.', '') if not result.get('_bl_fallback') else ''
+
+    # 第二优先级：正文
     if body_text:
-        result = _merge(result, parse_email_text(body_text))
+        result = merge_results(result, parse_email_text(body_text))
+
+    # 第三优先级：附件
     for att in attachment_texts:
         if att.get('text'):
-            result = _merge(result, parse_email_text(att['text']))
+            result = merge_results(result, parse_email_text(att['text']))
 
+    # 标题若已明确识别 BL，覆盖正文中的手机号等噪音
+    if subject_bl:
+        result['B/L No.'] = subject_bl
+        line = _bl_to_line(subject_bl)
+        if line:
+            result['Shipping Line'] = line
+        port = _sitg_bl_to_port(subject_bl)
+        if port:
+            result['POD'] = port
+
+    # 从发件人推断货代
     if not result.get('货代') and from_addr:
         for key, fw in FORWARDER_MAP.items():
             if key in from_addr:
@@ -592,8 +933,17 @@ def parse_full_email(subject: str, from_addr: str, body_text: str,
 
     result['发件人'] = from_addr or ''
     result['邮件主题'] = subject or ''
+
+    # 附件文件名列表
+    if attachment_texts:
+        filenames = [a.get('filename', '') for a in attachment_texts if a.get('filename')]
+        if filenames:
+            result['附件'] = ', '.join(filenames)
+
+    # 清理内部标记
     result.pop('_bl_fallback', None)
     result.pop('_port_from_bl', None)
+    result.pop('_consignee_source', None)
     return result
 
 
@@ -670,6 +1020,8 @@ def _extract_excel_xlrd(data: bytes) -> str:
 # ── 数据库操作 ────────────────────────────────────────────────
 
 def insert_to_database(parsed: dict) -> dict:
+    import time as _time
+
     columns, values = [], []
     for field_name, db_col in FIELD_TO_DB_COLUMN.items():
         val = parsed.get(field_name)
@@ -694,28 +1046,41 @@ def insert_to_database(parsed: dict) -> dict:
     placeholder_str = ', '.join(['%s'] * len(values))
     sql = f"INSERT INTO `{DB_TABLE}` ({col_str}) VALUES ({placeholder_str})"
 
-    conn = None
-    try:
-        conn = _get_mysql_conn()
-        with conn.cursor() as cur:
-            cur.execute(sql, values)
-            row_id = cur.lastrowid
-        conn.commit()
-        return {"success": True, "row_id": row_id, "bl_no": bl_no,
-                "message": f"已写入数据库（id={row_id}，提单号={bl_no or '未识别'}）"}
-    except Exception as e:
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-        return {"success": False, "row_id": None, "bl_no": bl_no, "message": f"写入失败：{e}"}
-    finally:
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
+    retry_keywords = ("timeout", "lost connection", "2013", "2006", "broken pipe")
+    max_retries = 3
+    last_exc: Exception | None = None
+
+    for attempt in range(max_retries):
+        conn = None
+        try:
+            conn = _get_mysql_conn()
+            with conn.cursor() as cur:
+                cur.execute(sql, values)
+                row_id = cur.lastrowid
+            conn.commit()
+            return {"success": True, "row_id": row_id, "bl_no": bl_no,
+                    "message": f"已写入数据库（id={row_id}，提单号={bl_no or '未识别'}）"}
+        except Exception as e:
+            last_exc = e
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            err_lower = str(e).lower()
+            if any(kw in err_lower for kw in retry_keywords) and attempt < max_retries - 1:
+                _time.sleep(2)
+                continue
+            break
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    return {"success": False, "row_id": None, "bl_no": bl_no,
+            "message": f"写入失败：{last_exc}"}
 
 
 def update_progress_by_bl(bl_no: str, progress_value: str) -> dict:
@@ -804,18 +1169,45 @@ def query_broker_by_bl(bl_no: str) -> str:
                 pass
 
 
+def query_product_by_bl(bl_no: str) -> str:
+    """按提单号查询数据库中的品名，找不到返回空串。"""
+    if not bl_no:
+        return ""
+    conn = None
+    try:
+        conn = _get_mysql_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT `品名` FROM `{DB_TABLE}` WHERE `B_L_No` = %s ORDER BY `创建时间` DESC LIMIT 1",
+                (bl_no.upper(),)
+            )
+            row = cur.fetchone()
+            return str(row[0]).strip() if row and row[0] else ""
+    except Exception:
+        return ""
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 # ── 配置表操作（清关公司 / 草稿模板） ─────────────────────────
 
 def _ensure_config_tables():
+    """创建需要的配置表（模板 + broker 查找表）。"""
     conn = _get_mysql_conn()
     try:
         with conn.cursor() as cur:
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS `app_config_brokers` (
-                    `name` VARCHAR(100) NOT NULL PRIMARY KEY,
-                    `emails_json` TEXT NOT NULL,
-                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                ) CHARSET=utf8mb4
+                CREATE TABLE IF NOT EXISTS `broker_email_lookup` (
+                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                  `broker_name` VARCHAR(100) NOT NULL,
+                  `email_address` VARCHAR(255) NOT NULL DEFAULT '',
+                  `channel` VARCHAR(20) NOT NULL DEFAULT 'email',
+                  UNIQUE KEY `uq_broker_email` (`broker_name`, `email_address`)
+                ) CHARACTER SET utf8mb4
             """)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS `app_config_templates` (
@@ -829,33 +1221,104 @@ def _ensure_config_tables():
     finally:
         conn.close()
 
+    _migrate_legacy_brokers_if_needed()
 
-def get_brokers() -> dict:
+
+def _migrate_legacy_brokers_if_needed():
+    """把旧 app_config_brokers（JSON）数据一次性搬到 broker_email_lookup（仅当新表空）。"""
     import json
     conn = _get_mysql_conn()
     try:
         with conn.cursor() as cur:
+            # 仅当旧表存在时才检查
+            cur.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = DATABASE() AND table_name = 'app_config_brokers'"
+            )
+            if (cur.fetchone() or [0])[0] == 0:
+                return
+            cur.execute("SELECT COUNT(*) FROM `broker_email_lookup`")
+            if (cur.fetchone() or [0])[0] > 0:
+                return
             cur.execute("SELECT `name`, `emails_json` FROM `app_config_brokers`")
-            rows = cur.fetchall()
-        return {name: json.loads(emails_json) for name, emails_json in rows}
+            legacy_rows = cur.fetchall()
+            if not legacy_rows:
+                return
+            payload: list[tuple[str, str, str]] = []
+            for name, emails_json in legacy_rows:
+                try:
+                    emails = json.loads(emails_json) if emails_json else []
+                except Exception:
+                    emails = []
+                if not emails:
+                    payload.append((name, '', 'email'))
+                else:
+                    for e in emails:
+                        payload.append((name, str(e), 'email'))
+            if payload:
+                cur.executemany(
+                    "INSERT IGNORE INTO `broker_email_lookup` "
+                    "(`broker_name`, `email_address`, `channel`) VALUES (%s, %s, %s)",
+                    payload,
+                )
+                conn.commit()
+                print(f"[migration] 已从 app_config_brokers 迁移 {len(payload)} 条到 broker_email_lookup")
+        reload_broker_emails()
+    except Exception as e:
+        print(f"[migration] 迁移 brokers 失败：{e}")
     finally:
         conn.close()
 
 
-def upsert_broker(name: str, emails: list[str]) -> bool:
-    import json
+def get_brokers() -> dict:
+    """返回 {name: {emails: [...], channel: 'email'|'wechat'}}。"""
     conn = _get_mysql_conn()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO `app_config_brokers` (`name`, `emails_json`) VALUES (%s, %s) "
-                "ON DUPLICATE KEY UPDATE `emails_json` = VALUES(`emails_json`)",
-                (name, json.dumps(emails, ensure_ascii=False))
+                "SELECT `broker_name`, `email_address`, `channel` "
+                "FROM `broker_email_lookup` ORDER BY `id`"
+            )
+            rows = cur.fetchall()
+        out: dict[str, dict] = {}
+        for name, email, channel in rows:
+            entry = out.setdefault(name, {"emails": [], "channel": channel})
+            # channel 以首次出现的为准，若存在 wechat 行则保持 wechat
+            if channel == 'wechat':
+                entry["channel"] = 'wechat'
+            if email:
+                entry["emails"].append(email)
+        return out
+    finally:
+        conn.close()
+
+
+def upsert_broker(name: str, emails: list[str], channel: str = "email") -> bool:
+    """覆盖式写入：先删该 broker 的所有行，再重新插入当前 emails。"""
+    channel = channel if channel in ("email", "wechat") else "email"
+    if channel == "wechat":
+        rows: list[tuple[str, str, str]] = [(name, '', 'wechat')]
+    else:
+        cleaned = [e.strip() for e in (emails or []) if e and e.strip()]
+        rows = [(name, e, 'email') for e in cleaned] if cleaned else [(name, '', 'email')]
+
+    conn = _get_mysql_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM `broker_email_lookup` WHERE `broker_name` = %s", (name,))
+            cur.executemany(
+                "INSERT INTO `broker_email_lookup` "
+                "(`broker_name`, `email_address`, `channel`) VALUES (%s, %s, %s)",
+                rows,
             )
         conn.commit()
+        reload_broker_emails()
         return True
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return False
     finally:
         conn.close()
@@ -865,11 +1328,15 @@ def delete_broker(name: str) -> bool:
     conn = _get_mysql_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM `app_config_brokers` WHERE `name` = %s", (name,))
+            cur.execute("DELETE FROM `broker_email_lookup` WHERE `broker_name` = %s", (name,))
         conn.commit()
+        reload_broker_emails()
         return True
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return False
     finally:
         conn.close()

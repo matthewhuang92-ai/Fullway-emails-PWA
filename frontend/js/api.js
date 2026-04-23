@@ -49,6 +49,7 @@ export const DbAPI = {
   insert:          (parsed)    => _fetch('/api/db/insert', { method: 'POST', body: JSON.stringify({ parsed }) }),
   updateProgress:  (bl, prog)  => _fetch('/api/db/progress', { method: 'PUT', body: JSON.stringify({ bl_no: bl, progress_value: prog }) }),
   getBrokerByBl:   (bl)        => _fetch(`/api/db/broker/${encodeURIComponent(bl)}`),
+  getProductByBl:  (bl)        => _fetch(`/api/db/product/${encodeURIComponent(bl)}`),
   parseEmail:      (data)      => _fetch('/api/db/parse', { method: 'POST', body: JSON.stringify({ parsed: data }) }),
 };
 

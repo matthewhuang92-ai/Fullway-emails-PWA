@@ -101,7 +101,8 @@ class UpdateMingxiRequest(BaseModel):
 
 class BrokerCreate(BaseModel):
     name: str
-    emails: list[str]
+    emails: list[str] = []
+    channel: str = "email"  # "email" | "wechat"
 
 
 # ── 草稿模板 ──────────────────────────────────────────────────
