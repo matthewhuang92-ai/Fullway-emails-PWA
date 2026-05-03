@@ -413,8 +413,8 @@ function _openSettings(required = false) {
         <div class="settings-section-title">API 连接</div>
         <div class="form-group">
           <label class="form-label">后端 API 地址</label>
-          <input class="form-input" id="setBase" value="${_esc(curBase)}" placeholder="https://your-app.railway.app">
-          <div class="settings-note">Railway 部署后在 Dashboard 查看域名</div>
+          <input class="form-input" id="setBase" value="${_esc(curBase)}" placeholder="https://api.seeyourcargo.com">
+          <div class="settings-note">Vultr 部署，域名 https://api.seeyourcargo.com</div>
         </div>
         <div class="form-group">
           <label class="form-label">API Token</label>
